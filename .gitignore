@@ -1,0 +1,5 @@
+.current_model
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
