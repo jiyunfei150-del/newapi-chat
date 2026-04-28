@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Chat</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #212121;
+    --sidebar-bg: #171717;
+    --input-bg: #2f2f2f;
+    --text: #ececec;
+    --text-dim: #8e8ea0;
+    --accent: #19c37d;
+    --border: #3d3d3d;
+    --user-bubble: #2f2f2f;
+    --hover: #2a2a2a;
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); display: flex; height: 100vh; overflow: hidden; font-size: 15px; }
+
+  /* Sidebar */
+  #sidebar { width: 260px; background: var(--sidebar-bg); display: flex; flex-direction: column; padding: 12px 8px; gap: 4px; flex-shrink: 0; border-right: 1px solid var(--border); }
+  #sidebar-logo { padding: 8px 12px 16px; font-size: 18px; font-weight: 600; color: var(--text); letter-spacing: -0.3px; }
+  #sidebar-logo span { color: var(--accent); }
+  #new-chat-btn { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 8px; cursor: pointer; color: var(--text); border: 1px solid var(--border); background: transparent; font-size: 14px; transition: background 0.15s; margin-bottom: 8px; }
+  #new-chat-btn:hover { background: var(--hover); }
+  #new-chat-btn svg { opacity: 0.7; }
+  .sidebar-section { padding: 6px 12px 4px; font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.8px; }
+  .history-item { padding: 8px 12px; border-radius: 8px; cursor: pointer; color: var(--text-dim); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: background 0.15s; }
+  .history-item:hover { background: var(--hover); color: var(--text); }
+  #sidebar-footer { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--border); }
+  #model-select-wrap { padding: 8px 4px; }
+  #model-select-wrap label { font-size: 11px; color: var(--text-dim); padding: 0 8px; display: block; margin-bottom: 6px; }
+  #model-select { width: 100%; background: var(--input-bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 13px; cursor: pointer; outline: none; }
+  #model-select:focus { border-color: var(--accent); }
+
+  /* Main */
+  #main { flex: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; }
+
+  /* Chat area */
+  #chat-area { flex: 1; overflow-y: auto; padding: 24px 0; scroll-behavior: smooth; }
+  #chat-area::-webkit-scrollbar { width: 6px; }
+  #chat-area::-webkit-scrollbar-track { background: transparent; }
+  #chat-area::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  .message-row { display: flex; justify-content: center; padding: 4px 24px; }
+  .message-inner { width: 100%; max-width: 720px; }
+  .message-row.user .message-inner { display: flex; justify-content: flex-end; }
+  .bubble { padding: 12px 16px; border-radius: 16px; line-height: 1.65; white-space: pre-wrap; word-break: break-word; }
+  .user .bubble { background: var(--user-bubble); border-bottom-right-radius: 4px; max-width: 80%; }
+  .assistant .bubble { background: transparent; padding-left: 0; padding-right: 0; max-width: 100%; }
+  .assistant .avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; color: #fff; flex-shrink: 0; margin-right: 12px; margin-top: 2px; }
+  .assistant .message-inner { display: flex; align-items: flex-start; }
+  .assistant .bubble-wrap { flex: 1; }
+
+  /* Code blocks */
+  .bubble pre { background: #1a1a1a; border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; overflow-x: auto; margin: 8px 0; font-size: 13px; }
+  .bubble code { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 13px; }
+  .bubble p:not(:last-child) { margin-bottom: 10px; }
+  .bubble ul, .bubble ol { padding-left: 20px; margin: 6px 0; }
+  .bubble li { margin: 4px 0; }
+  .bubble h1, .bubble h2, .bubble h3 { margin: 12px 0 6px; }
+
+  /* Empty state */
+  #empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 16px; color: var(--text-dim); }
+  #empty-state h2 { font-size: 28px; font-weight: 600; color: var(--text); }
+  #empty-state p { font-size: 15px; }
+  .suggestion-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; max-width: 500px; }
+  .suggestion-card { background: var(--input-bg); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; cursor: pointer; font-size: 13px; color: var(--text-dim); transition: all 0.15s; }
+  .suggestion-card:hover { border-color: var(--accent); color: var(--text); }
+
+  /* Input area */
+  #input-area { padding: 16px 24px 24px; display: flex; justify-content: center; }
+  #input-wrap { width: 100%; max-width: 720px; background: var(--input-bg); border: 1px solid var(--border); border-radius: 16px; display: flex; flex-direction: column; padding: 12px 14px; gap: 10px; transition: border-color 0.15s; }
+  #input-wrap:focus-within { border-color: #555; }
+  #msg-input { background: transparent; border: none; outline: none; color: var(--text); font-size: 15px; resize: none; min-height: 24px; max-height: 200px; line-height: 1.5; font-family: inherit; }
+  #msg-input::placeholder { color: var(--text-dim); }
+  .input-bottom { display: flex; align-items: center; justify-content: space-between; }
+  .input-left { display: flex; gap: 8px; align-items: center; }
+  .tool-btn { background: transparent; border: 1px solid var(--border); border-radius: 8px; padding: 5px 10px; color: var(--text-dim); cursor: pointer; font-size: 12px; display: flex; align-items: center; gap: 4px; transition: all 0.15s; }
+  .tool-btn:hover { border-color: #555; color: var(--text); }
+  #send-btn { width: 34px; height: 34px; border-radius: 8px; background: var(--accent); border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: opacity 0.15s; flex-shrink: 0; }
+  #send-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+  #send-btn:not(:disabled):hover { opacity: 0.85; }
+  #send-btn svg { color: #000; }
+
+  /* Stream cursor */
+  .cursor { display: inline-block; width: 2px; height: 16px; background: var(--text); animation: blink 0.8s infinite; vertical-align: middle; margin-left: 1px; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+  /* Toast */
+  #toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #333; color: var(--text); padding: 10px 18px; border-radius: 10px; font-size: 13px; opacity: 0; transition: opacity 0.2s; pointer-events: none; z-index: 999; }
+  #toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<!-- Sidebar -->
+<div id="sidebar">
+  <div id="sidebar-logo">AI <span>Chat</span></div>
+  <button id="new-chat-btn" onclick="newChat()">
+    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+    新对话
+  </button>
+  <div class="sidebar-section">历史记录</div>
+  <div id="history-list"></div>
+  <div id="sidebar-footer">
+    <div id="model-select-wrap">
+      <label>当前模型</label>
+      <select id="model-select" onchange="switchModel(this.value)">
+        <option value="">加载中...</option>
+      </select>
+    </div>
+  </div>
+</div>
+
+<!-- Main -->
+<div id="main">
+  <div id="chat-area">
+    <div id="empty-state">
+      <h2>有什么可以帮你的？</h2>
+      <p>选择一个模型开始对话</p>
+      <div class="suggestion-grid">
+        <div class="suggestion-card" onclick="useSuggestion(this)">帮我写一份项目计划书</div>
+        <div class="suggestion-card" onclick="useSuggestion(this)">解释一下 Transformer 的原理</div>
+        <div class="suggestion-card" onclick="useSuggestion(this)">用 Python 写一个快速排序</div>
+        <div class="suggestion-card" onclick="useSuggestion(this)">帮我翻译一段英文文档</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="input-area">
+    <div id="input-wrap">
+      <textarea id="msg-input" placeholder="发消息给 AI..." rows="1"
+        onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+      <div class="input-bottom">
+        <div class="input-left">
+          <button class="tool-btn" onclick="clearHistory()">🗑 清空上下文</button>
+        </div>
+        <button id="send-btn" onclick="sendMessage()" disabled>
+          <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const BASE_URL = 'https://ai.pocketcity.com';
+const API_KEY  = 'sk-LjCi2U6C3HG6msZew5MF6rMQNoqIWASoBLElnL6upA3uMLu9';
+
+let currentModel = '';
+let messages = [];
+let isStreaming = false;
+let sessions = JSON.parse(localStorage.getItem('chat_sessions') || '[]');
+let currentSessionId = null;
+
+// ── Init ──────────────────────────────────────────────────────
+window.onload = async () => {
+  await loadModels();
+  renderHistory();
+  document.getElementById('msg-input').addEventListener('input', updateSendBtn);
+};
+
+async function loadModels() {
+  try {
+    const r = await fetch(`${BASE_URL}/v1/models`, { headers: authHeaders() });
+    const data = await r.json();
+    const models = data.data || [];
+    models.sort((a, b) => a.id.localeCompare(b.id));
+
+    const sel = document.getElementById('model-select');
+    sel.innerHTML = '';
+
+    // 分组
+    const groups = {
+      'OpenAI': [], 'Claude': [], 'Gemini': [], 'DeepSeek': [],
+      'Kimi': [], 'Qwen': [], 'Grok': [], '其他': []
+    };
+    models.forEach(m => {
+      const id = m.id;
+      if (id.startsWith('gpt') || id.startsWith('o1') || id.startsWith('o3') || id.startsWith('o4')) groups['OpenAI'].push(id);
+      else if (id.startsWith('claude')) groups['Claude'].push(id);
+      else if (id.startsWith('gemini')) groups['Gemini'].push(id);
+      else if (id.startsWith('deepseek')) groups['DeepSeek'].push(id);
+      else if (id.startsWith('kimi') || id.startsWith('moonshot')) groups['Kimi'].push(id);
+      else if (id.toLowerCase().startsWith('qwen')) groups['Qwen'].push(id);
+      else if (id.startsWith('grok')) groups['Grok'].push(id);
+      else groups['其他'].push(id);
+    });
+
+    Object.entries(groups).forEach(([name, ids]) => {
+      if (!ids.length) return;
+      const og = document.createElement('optgroup');
+      og.label = name;
+      ids.forEach(id => {
+        const opt = document.createElement('option');
+        opt.value = id;
+        opt.textContent = id;
+        og.appendChild(opt);
+      });
+      sel.appendChild(og);
+    });
+
+    // 默认选 gpt-4o 或第一个
+    const saved = localStorage.getItem('current_model');
+    const defaultModel = saved && models.find(m => m.id === saved) ? saved
+      : (models.find(m => m.id === 'gpt-4o') || models[0])?.id || '';
+    sel.value = defaultModel;
+    currentModel = defaultModel;
+    localStorage.setItem('current_model', currentModel);
+    updateSendBtn();
+  } catch (e) {
+    showToast('加载模型失败: ' + e.message);
+  }
+}
+
+function switchModel(id) {
+  currentModel = id;
+  localStorage.setItem('current_model', id);
+  showToast(`已切换到 ${id}`);
+}
+
+// ── Send ──────────────────────────────────────────────────────
+async function sendMessage() {
+  const input = document.getElementById('msg-input');
+  const text = input.value.trim();
+  if (!text || isStreaming || !currentModel) return;
+
+  hideEmptyState();
+  input.value = '';
+  autoResize(input);
+  updateSendBtn();
+
+  messages.push({ role: 'user', content: text });
+  appendMessage('user', text);
+
+  const assistantEl = appendMessage('assistant', '');
+  const bubbleEl = assistantEl.querySelector('.bubble');
+  const cursor = document.createElement('span');
+  cursor.className = 'cursor';
+  bubbleEl.appendChild(cursor);
+
+  isStreaming = true;
+  updateSendBtn();
+
+  try {
+    const resp = await fetch(`${BASE_URL}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: currentModel,
+        messages: messages,
+        stream: true,
+        max_tokens: 4096,
+      })
+    });
+
+    if (!resp.ok) {
+      const err = await resp.text();
+      throw new Error(`HTTP ${resp.status}: ${err}`);
+    }
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let fullContent = '';
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+      for (const line of lines) {
+        const l = line.trim();
+        if (!l || !l.startsWith('data: ')) continue;
+        const payload = l.slice(6);
+        if (payload === '[DONE]') break;
+        try {
+          const chunk = JSON.parse(payload);
+          const delta = chunk.choices?.[0]?.delta?.content || '';
+          fullContent += delta;
+          bubbleEl.textContent = fullContent;
+          bubbleEl.appendChild(cursor);
+          scrollToBottom();
+        } catch {}
+      }
+    }
+
+    cursor.remove();
+    renderMarkdown(bubbleEl, fullContent);
+    messages.push({ role: 'assistant', content: fullContent });
+    saveSession(text, fullContent);
+
+  } catch (e) {
+    cursor.remove();
+    bubbleEl.textContent = '❌ 请求失败: ' + e.message;
+    messages.pop();
+  } finally {
+    isStreaming = false;
+    updateSendBtn();
+    scrollToBottom();
+  }
+}
+
+// ── DOM helpers ───────────────────────────────────────────────
+function appendMessage(role, text) {
+  const area = document.getElementById('chat-area');
+  const row = document.createElement('div');
+  row.className = `message-row ${role}`;
+  if (role === 'user') {
+    row.innerHTML = `<div class="message-inner"><div class="bubble">${escHtml(text)}</div></div>`;
+  } else {
+    row.innerHTML = `<div class="message-inner"><div class="avatar">A</div><div class="bubble-wrap"><div class="bubble"></div></div></div>`;
+  }
+  area.appendChild(row);
+  scrollToBottom();
+  return row;
+}
+
+function renderMarkdown(el, text) {
+  // 简单 markdown 渲染
+  let html = escHtml(text)
+    .replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => `<pre><code>${code}</code></pre>`)
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+    .replace(/^[-*] (.+)$/gm, '<li>$1</li>')
+    .replace(/(<li>.*<\/li>)/gs, '<ul>$1</ul>')
+    .replace(/\n\n/g, '</p><p>')
+    .replace(/\n/g, '<br>');
+  el.innerHTML = `<p>${html}</p>`;
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function hideEmptyState() {
+  const es = document.getElementById('empty-state');
+  if (es) es.remove();
+}
+
+function scrollToBottom() {
+  const area = document.getElementById('chat-area');
+  area.scrollTop = area.scrollHeight;
+}
+
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 200) + 'px';
+}
+
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+}
+
+function updateSendBtn() {
+  const btn = document.getElementById('send-btn');
+  const val = document.getElementById('msg-input').value.trim();
+  btn.disabled = !val || isStreaming || !currentModel;
+}
+
+function useSuggestion(el) {
+  document.getElementById('msg-input').value = el.textContent;
+  updateSendBtn();
+  document.getElementById('msg-input').focus();
+}
+
+function authHeaders() {
+  return { 'Authorization': `Bearer ${API_KEY}` };
+}
+
+// ── Session ───────────────────────────────────────────────────
+function saveSession(firstMsg, reply) {
+  if (!currentSessionId) {
+    currentSessionId = Date.now().toString();
+    sessions.unshift({ id: currentSessionId, title: firstMsg.slice(0, 30), messages: [] });
+  }
+  const s = sessions.find(s => s.id === currentSessionId);
+  if (s) s.messages = [...messages];
+  localStorage.setItem('chat_sessions', JSON.stringify(sessions.slice(0, 30)));
+  renderHistory();
+}
+
+function renderHistory() {
+  const list = document.getElementById('history-list');
+  list.innerHTML = '';
+  sessions.slice(0, 20).forEach(s => {
+    const div = document.createElement('div');
+    div.className = 'history-item';
+    div.textContent = s.title || '新对话';
+    div.onclick = () => loadSession(s.id);
+    list.appendChild(div);
+  });
+}
+
+function loadSession(id) {
+  const s = sessions.find(s => s.id === id);
+  if (!s) return;
+  currentSessionId = id;
+  messages = [...s.messages];
+  const area = document.getElementById('chat-area');
+  area.innerHTML = '';
+  messages.forEach(m => appendMessage(m.role, m.content));
+}
+
+function newChat() {
+  currentSessionId = null;
+  messages = [];
+  const area = document.getElementById('chat-area');
+  area.innerHTML = `<div id="empty-state">
+    <h2>有什么可以帮你的？</h2>
+    <p>选择一个模型开始对话</p>
+    <div class="suggestion-grid">
+      <div class="suggestion-card" onclick="useSuggestion(this)">帮我写一份项目计划书</div>
+      <div class="suggestion-card" onclick="useSuggestion(this)">解释一下 Transformer 的原理</div>
+      <div class="suggestion-card" onclick="useSuggestion(this)">用 Python 写一个快速排序</div>
+      <div class="suggestion-card" onclick="useSuggestion(this)">帮我翻译一段英文文档</div>
+    </div>
+  </div>`;
+}
+
+function clearHistory() {
+  messages = [];
+  showToast('上下文已清空');
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+</script>
+</body>
+</html>
